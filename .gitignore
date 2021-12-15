@@ -1,0 +1,10 @@
+Library/
+log/
+Logs/
+ProjectSettings/
+.DS_Store
+Temp/
+UserSettings/
+sanity-env.app/
+memory.npy
+model/
