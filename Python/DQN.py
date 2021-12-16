@@ -16,11 +16,13 @@ class Config(object):
         Reduce_rate     :   learning rate reduction
         Epoch           :   epoch for training
         Batch_size      :   batch size in each iteration
-        Memory_capacity :   storage memory, for DQN training, to avoid relationship, we maintain a
-                            history database, and update it iteratively, when train the network, we
-                            random select batch_size info from the memory
+        Memory_capacity :   storage memory, for DQN training, to avoid
+            relationship, we maintain a history database, and update it
+            iteratively, when train the network, we random select batch_size
+            info from the memory
         GAMMA           :   reduction rate of reward
-        Q_iteration     :   number of turns to copy weight from eval_net to target network
+        Q_iteration     :   number of turns to copy weight from eval_net to
+            target network
         """
         self.learning_rate = 1e-3
         self.weight_decay = 1e-5
@@ -33,8 +35,8 @@ class Config(object):
 
     def model_config(self):
         """
-        env_size        :   I first plan to use occupancy map to represent the env, and this env_size
-                            is the resolution of occupancy map
+        env_size        :   I first plan to use occupancy map to represent the
+            env, and this env_size is the resolution of occupancy map
         action_space    :   dimension of action space. 2 : 0-left, 1-right
         """
         self.env_size = 6
@@ -163,7 +165,7 @@ class DQN(object):
         batch_env = torch.FloatTensor(batch_env)
         batch_pos = torch.FloatTensor(batch_pos)
         batch_action = torch.LongTensor(batch_action).unsqueeze(1)
-        batch_reward = torch.FloatTensor(batch_reward)
+        batch_reward = torch.FloatTensor(batch_reward).unsqueeze(1)
         batch_next_env = torch.FloatTensor(batch_next_env)
         batch_next_pos = torch.FloatTensor(batch_next_pos)
 
