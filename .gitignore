@@ -8,3 +8,7 @@ UserSettings/
 sanity-env.app/
 memory.npy
 model/
+*/Resources
+*/ML-Agents
+*/ML-Agents.meta
+*/Resources.meta
