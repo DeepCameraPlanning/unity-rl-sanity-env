@@ -13,6 +13,6 @@ Version: `2020.3.24f1`
 Version: `3.7.11`
 
 1. Run `pip install -r requirements.txt`
-2. Run `python Python/main.py` to launch the training
+2. Run `python Python/main.py` to launch the training (add the option `-d` to display the env)
 
 Note: if you have local file import troubles, check your `PYTHONPATH`.
