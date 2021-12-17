@@ -44,9 +44,14 @@ public class CameraAgent : Agent
     private Texture2D screenShot;
 
     private float obstacleTheta, mainTheta;
-    private float obstacleDirection, mainDirection;
+    private Vector3 obstacleRelative, mainRelative;
+    private float obstacleAmplitude = 2.0f, mainAmplitude = 5.0f;
+    // Keep `obstacleDirection = 1`, as the unit direction
+    private float obstacleDirection = 1.0f, mainDirection = 2.0f;
+    // Divide direction variables by a speed norm in order to normalize them
+    private float speedNorm = 500.0f;
+    private float obstacleSpeed, mainSpeed;
 
-    int timeStep = 30;
     private float rewardCollision;
 
     EnvironmentParameters resetParams;
@@ -57,32 +62,39 @@ public class CameraAgent : Agent
         resetParams = Academy.Instance.EnvironmentParameters;
         main = gameObject.GetComponent<Camera>();
 
+        Application.targetFrameRate = 60;
         renderTexture = new RenderTexture(Screen.width, Screen.height, 24);
         screenShot = new Texture2D(Screen.width, Screen.height, TextureFormat.RGB24, false);
+
+        obstacleSpeed = obstacleDirection / speedNorm;
+        mainSpeed = mainDirection / speedNorm;
 
     }
 
     public override void OnEpisodeBegin()
     {
-        // Initialize the camera position
+        // Initialize the camera and cube position
         this.initializeScene();
     }
 
     public override void CollectObservations(VectorSensor sensor)
     {
-        // Get camera and obstacle positions
-        sensor.AddObservation(main.transform.localPosition);
-        sensor.AddObservation(obstacle.localPosition);
+        // Get camera and obstacle relative positions
+        sensor.AddObservation(obstacleRelative);
+        sensor.AddObservation(mainRelative);
     }
 
     public override void OnActionReceived(ActionBuffers actionBuffers)
     {
-        obstacleDirection = 0.006f;
+        // Update obstacle angle
+        obstacleTheta += obstacleSpeed;
 
+        // Update camera angle according to the received action
         int action = actionBuffers.DiscreteActions[0];
-        if (action == 0) mainDirection = -0.03f;
-        else mainDirection = 0.03f;
-        updateState();
+        if (action == 0) mainTheta -= mainSpeed;
+        else mainTheta += mainSpeed;
+
+        updateState(mainTheta, obstacleTheta);
 
         if (rewardCollision == -1)
         {
@@ -90,8 +102,6 @@ public class CameraAgent : Agent
             EndEpisode();
         }
         else SetReward(1.0f);
-
-        timeStep += 1;
     }
 
     public override void Heuristic(in ActionBuffers actionsOut)
@@ -116,22 +126,26 @@ public class CameraAgent : Agent
         rewardCollision = -1;
         while (rewardCollision == -1)
         {
-            obstacleTheta = Random.Range(0, 2f);
-            mainTheta = Random.Range(0, 2f);
+            obstacleTheta = Random.Range(0, 1.0f);
+            mainTheta = Random.Range(0, 1.0f);
 
-            updateState();
+            updateState(mainTheta, obstacleTheta);
         }
     }
 
-    private void updateState()
+    private void updateState(float mainAngle, float obstacleAngle)
     {
         Vector3 head = target.transform.position;
 
-        obstacleTheta += obstacleDirection;
-        mainTheta += mainDirection;
+        // Compute obstacle and camera phases and relative positions
+        float obstaclePhase = 2 * Mathf.PI * obstacleAngle;
+        obstacleRelative = new Vector3(Mathf.Cos(obstaclePhase), 0, Mathf.Sin(obstaclePhase));
+        float mainPhase = 2 * Mathf.PI * mainAngle;
+        mainRelative = new Vector3(Mathf.Cos(mainPhase), 0, Mathf.Sin(mainPhase));
 
-        obstacle.transform.position = head + 2f * new Vector3(Mathf.Cos(obstacleTheta), 0, Mathf.Sin(obstacleTheta));
-        transform.position = head + 5f * new Vector3(Mathf.Cos(mainTheta), 0, Mathf.Sin(mainTheta));
+        // Update obstacle and camera positions
+        obstacle.transform.position = head + obstacleAmplitude * obstacleRelative;
+        transform.position = head + mainAmplitude * mainRelative;
 
         transform.LookAt(target.transform.position);
 
