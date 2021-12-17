@@ -1,59 +1,10 @@
 import os
-import torch
+from typing import Tuple
+
 import numpy as np
+from omegaconf import DictConfig
+import torch
 from torch import nn
-
-
-class Config(object):
-    def __init__(self):
-        self.learning_config()
-        self.model_config()
-
-    def learning_config(self):
-        """
-        Learning rate   :   param for optimizer
-        Weight_decay    :   param for optimizer
-        Reduce_rate     :   learning rate reduction
-        Epoch           :   epoch for training
-        Batch_size      :   batch size in each iteration
-        Memory_capacity :   storage memory, for DQN training, to avoid
-            relationship, we maintain a history database, and update it
-            iteratively, when train the network, we random select batch_size
-            info from the memory
-        GAMMA           :   reduction rate of reward
-        Q_iteration     :   number of turns to copy weight from eval_net to
-            target network
-        """
-        self.learning_rate = 1e-3
-        self.weight_decay = 1e-5
-        self.reduce_rate = 0.99
-        self.epoch = 1000
-        self.batch_size = 128
-        self.memory_capacity = 1000
-        self.GAMMA = 0.9
-        self.Q_iteration = 100
-
-    def model_config(self):
-        """
-        env_size        :   I first plan to use occupancy map to represent the
-            env, and this env_size is the resolution of occupancy map
-        action_space    :   dimension of action space. 2 : 0-left, 1-right
-        """
-        self.env_size = 6
-        self.action_space = 2
-
-        self.pretrain = True
-        self.load_name = "latest"
-        self.save_freq = 20
-        self.eval_freq = 1
-        self.log_dir = "log"
-        self.model_path = "model"
-
-        if not os.path.exists(self.log_dir):
-            os.mkdir(self.log_dir)
-
-        if not os.path.exists(self.model_path):
-            os.mkdir(self.model_path)
 
 
 class Model(nn.Module):
@@ -91,7 +42,7 @@ class Model(nn.Module):
 
 
 class DQN(object):
-    def __init__(self, config):
+    def __init__(self, config: DictConfig):
         self.config = config
 
         self.eval_net = Model(config.action_space)
@@ -115,26 +66,66 @@ class DQN(object):
         )
         self.criterion = nn.MSELoss()
 
-        if self.config.pretrain:
-            self.load_ckpt(self.eval_net)
+        self.checkpoint_path = os.path.join(
+            config.checkpoint_dir, config.checkpoint_filename
+        )
+        self.memory_path = os.path.join(
+            config.checkpoint_dir, config.memory_filename
+        )
+        if not os.path.exists(self.config.checkpoint_dir):
+            os.makedirs(self.config.checkpoint_dir)
+        if self.config.load_checkpoint:
+            # Load eval and target checkpoints
+            self.load_checkpoint(self.eval_net)
             self.target_net.load_state_dict(self.eval_net.state_dict())
-            if os.path.exists("memory.npy"):
-                self.memory = list(np.load("memory.npy", allow_pickle=True))
+            # Load a save memory
+            if os.path.exists(self.memory_path):
+                self.memory = list(
+                    np.load(self.memory_path, allow_pickle=True)
+                )
 
-    def store_transition(self, env, pos, action, reward, next_env, next_pos):
+    def store_transition(
+        self,
+        last_camera_position: Tuple[float, float, float],
+        last_obstacle_position: Tuple[float, float, float],
+        last_action: int,
+        current_reward: int,
+        current_camera_position: Tuple[float, float, float],
+        current_obstacle_position: Tuple[float, float, float],
+    ):
+        """Store transition between 2 states."""
         if self.memory_counter < self.config.memory_capacity:
-            self.memory.append([env, pos, action, reward, next_env, next_pos])
+            self.memory.append(
+                [
+                    last_camera_position,
+                    last_obstacle_position,
+                    last_action,
+                    current_reward,
+                    current_camera_position,
+                    current_obstacle_position,
+                ]
+            )
         else:
             index = self.memory_counter % self.config.memory_capacity
-            self.memory[index] = [env, pos, action, reward, next_env, next_pos]
+            self.memory[index] = [
+                last_camera_position,
+                last_obstacle_position,
+                last_action,
+                current_reward,
+                current_camera_position,
+                current_obstacle_position,
+            ]
         self.memory_counter += 1
 
-    def learn(self):
+    def learn(self) -> float:
+        """Learning step of the DQN and return the loss value."""
         if self.learn_step_counter % self.config.Q_iteration == 0:
             self.target_net.load_state_dict(self.eval_net.state_dict())
+
+            np.save(self.memory_path, self.memory)
+            self.save_checkpoint(self.eval_net)
+
             self.scheduler.step(self.learn_step_counter // 100)
-            np.save("memory", self.memory)
-            self.save_ckpt(self.eval_net)
 
         if self.memory_counter < self.config.memory_capacity:
             return 0
@@ -145,7 +136,7 @@ class DQN(object):
             self.config.memory_capacity, self.config.batch_size
         )
 
-        batch_memory = np.array(self.memory)[sample_index, :]
+        batch_memory = np.array(self.memory, dtype=object)[sample_index, :]
 
         batch_env = []
         batch_pos = []
@@ -182,29 +173,33 @@ class DQN(object):
 
         return loss.detach().numpy()
 
-    def act(self, env, position, greedy_ratio):
+    def act(
+        self,
+        obstacle_position: Tuple[float, float, float],
+        camera_position: Tuple[float, float, float],
+        greedy_ratio: float,
+    ) -> int:
+        """Compute the next predicted action."""
         if np.random.rand() < greedy_ratio:
             return np.random.randint(0, self.config.action_space)
 
-        env = torch.FloatTensor(env).unsqueeze(0)
-        position = torch.FloatTensor(position).unsqueeze(0)
+        obstacle_position = torch.FloatTensor(obstacle_position).unsqueeze(0)
+        camera_position = torch.FloatTensor(camera_position).unsqueeze(0)
 
-        C_value = self.eval_net(env, position)
-
+        C_value = self.eval_net(obstacle_position, camera_position)
         C_value = C_value.detach().numpy()
 
         return np.argmax(C_value)
 
-    def save_ckpt(self, model, cate="", name=None):
-        if name is None:
-            save_path = os.path.join(
-                self.config.model_path, cate + "latest.pth.tar"
-            )
-        else:
-            save_path = os.path.join(
-                self.config.model_path, cate + "{}.pth.tar".format(name)
-            )
-
+    def save_checkpoint(self, model: nn.Module):
+        """
+        Save a model checkpoint with:
+            - `model_state_dict`
+            - `optimizer_state_dict`
+            - `scheduler_state_dict`
+            - `learn_step_count`
+        """
+        save_path = self.checkpoint_path
         torch.save(
             {
                 "model_state_dict": model.state_dict(),
@@ -215,24 +210,21 @@ class DQN(object):
             save_path,
         )
 
-    def load_ckpt(self, model, cate="", name=None, only_model=False):
-        if name is None:
-            load_path = os.path.join(
-                self.config.model_path, cate + "latest.pth.tar"
-            )
-        else:
-            load_path = os.path.join(
-                self.config.model_path, cate + "{}.pth.tar".format(name)
-            )
-
-        if not os.path.exists(load_path):
-            return
-        print("load checkpoint from {}".format(load_path))
-
+    def load_checkpoint(self, model: nn.Module, only_model: bool = False):
+        """
+        Load a model checkpoint with:
+            - `model_state_dict`
+            - `optimizer_state_dict`
+            - `scheduler_state_dict`
+            - `learn_step_count`
+        If `only_model`, load only `model_state_dict`.
+        """
+        load_path = self.checkpoint_path
         checkpoint = torch.load(load_path)
 
         if only_model:
             model.load_state_dict(checkpoint["model_state_dict"])
+
         else:
             model.load_state_dict(checkpoint["model_state_dict"])
             self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])

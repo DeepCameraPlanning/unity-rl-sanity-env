@@ -1,0 +1,41 @@
+## Learning parameters
+
+# Params for optimizer
+learning_rate: 1e-3
+weight_decay: 1e-5
+
+# Batch size
+batch_size: 128
+
+# Learning rate reduction rate
+reduce_rate: 0.99
+# Reward reduction rate
+GAMMA: 0.9
+
+greedy_ratio: 0.1
+max_episode_steps: 1000
+max_succeded_episodes: 10
+update_frequency: 1
+n_episodes: 1000
+
+# Storage memory, for DQN training, to avoid relationship, we maintain a
+# history database, and update it iteratively, when train the network,
+# we random select `batch_size` info from the memory
+memory_capacity: 1000
+# Number of turns to copy weight from `eval_net` to target network
+Q_iteration: 100
+
+
+## Model parameters
+# Resolution of occupancy map
+env_size: 6
+# Dimension of action space. 2 : 0-left, 1-right
+action_space: 2
+
+# Wether to load/save checkpoints
+load_checkpoint: false
+checkpoint_dir: ${root}/checkpoints
+checkpoint_filename: latest.pth
+memory_filename: memory.npy
+save_freq: 20
+eval_freq: 1

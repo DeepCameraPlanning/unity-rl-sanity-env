@@ -54,6 +54,7 @@ public class CameraAgent : Agent
 
     private float rewardCollision;
 
+    private int maxEpisodeSteps;
     EnvironmentParameters resetParams;
 
     public override void Initialize()

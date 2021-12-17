@@ -1,26 +1,13 @@
 from collections import defaultdict
-from typing import Any, List, NamedTuple
+from typing import Any, List
 
 from mlagents_envs.environment import ActionTuple, UnityEnvironment
 import numpy as np
 import torch
+from tqdm import tqdm
+import wandb
 
-
-class Experience(NamedTuple):
-    """
-    An experience contains the data of one Agent transition.
-        - Observation
-        - Action
-        - Reward
-        - Done flag
-        - Next Observation
-    """
-
-    obs: np.ndarray
-    action: np.ndarray
-    reward: float
-    done: bool
-    next_obs: np.ndarray
+from src.utils.experience import Experience
 
 
 class Trainer:
@@ -28,9 +15,13 @@ class Trainer:
         self,
         model: torch.nn.Module,
         env: UnityEnvironment,
-        greedy_ratio: float = 0.1,
-        max_episode_steps: int = 10000,
-        update_frequency: int = 1,
+        greedy_ratio: float,
+        max_episode_steps: int,
+        max_succeded_episodes: int,
+        update_frequency: int,
+        project_name: str,
+        xp_name: str,
+        log_dir: str,
     ):
         self.model = model
         self.env = env
@@ -44,10 +35,16 @@ class Trainer:
         self.agent_to_loss = defaultdict(list)
         self.cumulative_rewards = []
         self.buffer = []
+        self._succeded_episodes = 0
+        self.episode_n_steps = []
 
         self._greedy_ratio = 1e-4
         self._max_episode_steps = max_episode_steps
+        self._max_succeded_episodes = max_succeded_episodes
         self._update_frequency = update_frequency
+
+        # Initialize logger
+        wandb.init(project=project_name, name=xp_name, dir=log_dir)
 
     def _handle_terminals(self, terminal_steps: List[Any]):
         """For all agents with a terminal step."""
@@ -71,7 +68,6 @@ class Trainer:
                 + terminal_steps[terminal_id].reward
             )
             self.cumulative_rewards.append(cumulative_reward)
-
             # Add the experience and the last experience to the buffer
             episode = self.agent_to_experiences.pop(terminal_id)
             episode.append(last_experience)
@@ -118,13 +114,25 @@ class Trainer:
 
     def train(self, behavior_name: str, n_episodes: int):
         """Train an agent over multiple episodes."""
-        for episode_index in range(n_episodes):
+        for episode_index in tqdm(range(n_episodes)):
             self._train_episode(behavior_name)
-            curr_loss = np.mean(self.agent_to_loss[0][-200:])
-            print(
-                f"[Episode: {episode_index}/{n_episodes}]:"
-                + f" Loss: {curr_loss:.2f}"
+
+            episode_losses = self.agent_to_loss.pop(0)
+            mean_episode_loss = np.mean(episode_losses)
+            episode_cumreward = self.cumulative_rewards[episode_index]
+            episode_n_steps = self.episode_n_steps[episode_index]
+            wandb.log(
+                {
+                    "episode/loss": mean_episode_loss,
+                    "episode/cumreward": episode_cumreward,
+                    "episode/n_steps": episode_n_steps,
+                    "episode": episode_index,
+                }
             )
+
+            if self._succeded_episodes > self._max_succeded_episodes:
+                print("Maximum number of succeded episodes reached.")
+                break
 
     def _train_episode(self, behavior_name: str):
         """Train an agent over 1 episode."""
@@ -136,9 +144,9 @@ class Trainer:
 
             # Check if there is a terminal step: the episode is over
             if (len(terminal_steps) > 0) and (step_index > 0):
-                # if step_index % self._update_frequency == 0:
-                self._update_model(decision_steps)
+                self._update_model(terminal_steps)
                 self._handle_terminals(terminal_steps)
+                self.episode_n_steps.append(step_index)
                 break
 
             if step_index % self._update_frequency == 0:
@@ -156,6 +164,11 @@ class Trainer:
             # Perform a step in the simulation
             self.env.step()
 
+            if step_index == self._max_episode_steps - 1:
+                self._succeded_episodes += 1
+                self.cumulative_rewards.append(self._max_episode_steps)
+                self.episode_n_steps.append(self._max_episode_steps)
+
     def _update_model(self, agent_steps: List[Any]):
         """
         Generate an action for all the agents that requested a decision
@@ -172,9 +185,6 @@ class Trainer:
             current_camera_position = current_obs[:3]
             current_obstacle_position = current_obs[3:]
 
-            if current_reward == 0:
-                current_reward = -1
-
             self.model.store_transition(
                 last_camera_position,
                 last_obstacle_position,
@@ -185,6 +195,7 @@ class Trainer:
             )
 
             agent_loss = self.model.learn()
+            wandb.log({"step/loss": agent_loss})
             self.agent_to_loss[agent_id].append(agent_loss)
 
     def _get_actions(self, agent_steps: List[Any]) -> np.array:

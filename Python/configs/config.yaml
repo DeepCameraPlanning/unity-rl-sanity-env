@@ -1,0 +1,29 @@
+defaults:
+  - _self_
+  - model: dqn.yaml
+  - env: sanity_env
+
+# Type of run to launch (current: train, TODO: debug/eval/infer/...)
+run_type: train
+
+root: ${hydra:runtime.cwd}
+# Path to folder with outputs and logs
+output_dir: ${hydra:run.dir}
+# Path to folder with outputs and logs
+log_dir: ${root}/logs
+# Path to folder for testing (junk folder)
+test_dir: ${root}/tests
+
+# Name of the project is accessed by loggers
+project_name: camera-planning
+# Name of the run is accessed by loggers
+xp_name: test
+# Wether to synced the logs or not (WandB)
+log_offline: false
+
+# Seed for random number generators
+seed: 1
+# Pretty print config at the start of the run using Rich library
+print_config: True
+# Disable (or not) python warnings
+ignore_warnings: True

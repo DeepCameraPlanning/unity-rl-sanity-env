@@ -5,10 +5,12 @@ ProjectSettings/
 .DS_Store
 Temp/
 UserSettings/
-sanity-env.app/
+sanity-env*
 memory.npy
-model/
 */Resources
 */ML-Agents
 */ML-Agents.meta
 */Resources.meta
+__Pycache__
+checkpoints/
+outputs/
