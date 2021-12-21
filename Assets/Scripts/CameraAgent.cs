@@ -42,6 +42,10 @@ public class CameraAgent : Agent
 
     private RenderTexture renderTexture;
     private Texture2D screenShot;
+    public GameObject prefabModel;
+    public float modelSize;
+    public Material mat;
+    GameObject mainModel;
 
     private float obstacleTheta, mainTheta;
     private Vector3 obstacleRelative, mainRelative;
@@ -49,8 +53,8 @@ public class CameraAgent : Agent
     // Keep `obstacleDirection = 1`, as the unit direction
     private float obstacleDirection = 1.0f, mainDirection = 2.0f;
     // Divide direction variables by a speed norm in order to normalize them
-    private float speedNorm = 500.0f;
     private float obstacleSpeed, mainSpeed;
+    private const float speedNorm = 500.0f;
 
     private float rewardCollision;
 
@@ -69,6 +73,15 @@ public class CameraAgent : Agent
 
         obstacleSpeed = obstacleDirection / speedNorm;
         mainSpeed = mainDirection / speedNorm;
+
+        mainModel = Instantiate(prefabModel, transform.position, transform.rotation);
+        mainModel.GetComponentsInChildren<Renderer>().ToList().ForEach(M =>
+        {
+            M.sharedMaterial = mat;
+            M.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            M.receiveShadows = false;
+        });
+        mainModel.transform.localScale = Vector3.one * modelSize;
 
     }
 
@@ -91,9 +104,13 @@ public class CameraAgent : Agent
         obstacleTheta += obstacleSpeed;
 
         // Update camera angle according to the received action
+        // Discrete agent
         int action = actionBuffers.DiscreteActions[0];
         if (action == 0) mainTheta -= mainSpeed;
-        else mainTheta += mainSpeed;
+        else if (action == 1) mainTheta += mainSpeed;
+        else if (action == 2) mainTheta = mainTheta;
+        // Continuous agent
+        // mainTheta += mainSpeed * actionBuffers.ContinuousActions[0];
 
         updateState(mainTheta, obstacleTheta);
 
@@ -114,13 +131,14 @@ public class CameraAgent : Agent
         //     discreteActionsOut[0] = 1;
 
         // }
-        // if (Input.GetKey("right"))
+        // else if (Input.GetKey("right"))
         // {
         //     discreteActionsOut[0] = 0;
         // }
-        // discreteActionsOut[0] = 1;
+        // else discreteActionsOut[0] = 2;
+        var continuousActionsOut = actionsOut.ContinuousActions;
+        continuousActionsOut[0] = Input.GetAxis("Horizontal");
     }
-
 
     private void initializeScene()
     {
@@ -149,6 +167,8 @@ public class CameraAgent : Agent
         transform.position = head + mainAmplitude * mainRelative;
 
         transform.LookAt(target.transform.position);
+        mainModel.transform.position = transform.position;
+        mainModel.transform.rotation = transform.rotation;
 
         if (isColliding()) rewardCollision = -1;
         else rewardCollision = 1;

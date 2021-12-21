@@ -11,7 +11,6 @@ def print_config(
         # "compnode",
         "model",
         "env",
-        "datamodule",
         "xp_name",
         "seed",
     ),

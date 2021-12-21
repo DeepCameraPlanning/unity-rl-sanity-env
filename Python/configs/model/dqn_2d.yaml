@@ -35,7 +35,7 @@ action_space: 2
 # Wether to load/save checkpoints
 load_checkpoint: false
 checkpoint_dir: ${root}/checkpoints
-checkpoint_filename: latest.pth
-memory_filename: memory.npy
+checkpoint_filename: 2d_latest.pth
+memory_filename: 2d_memory.npy
 save_freq: 20
 eval_freq: 1

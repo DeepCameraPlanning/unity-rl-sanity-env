@@ -1,7 +1,7 @@
 defaults:
   - _self_
-  - model: dqn.yaml
-  - env: sanity_env
+  - model: dqn_3d.yaml
+  - env: sanity_env_discrete
 
 # Type of run to launch (current: train, TODO: debug/eval/infer/...)
 run_type: train
