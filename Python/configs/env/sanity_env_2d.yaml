@@ -1,0 +1,3 @@
+path: ${root}/sanity-env-discrete
+display: true
+num_actions: 2
