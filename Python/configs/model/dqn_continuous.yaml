@@ -29,13 +29,13 @@ Q_iteration: 100
 ## Model parameters
 # Resolution of occupancy map
 env_size: 6
-# Dimension of action space. 3 : 0-left, 1-right, 2-static
-action_space: 3
+# Dimension of action space: continuous velocity between -1 and 1
+action_space: 1
 
 # Wether to load/save checkpoints
-load_checkpoint: true
+load_checkpoint: false
 checkpoint_dir: ${root}/checkpoints
-checkpoint_filename: 3d_latest.pth
-memory_filename: 3d_memory.npy
+checkpoint_filename: continuous_latest.pth
+memory_filename: continuous_memory.npy
 save_freq: 20
 eval_freq: 1

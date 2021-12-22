@@ -33,7 +33,7 @@ env_size: 6
 action_space: 2
 
 # Wether to load/save checkpoints
-load_checkpoint: false
+load_checkpoint: true
 checkpoint_dir: ${root}/checkpoints
 checkpoint_filename: 2d_latest.pth
 memory_filename: 2d_memory.npy

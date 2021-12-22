@@ -112,6 +112,31 @@ class Trainer:
         for agent_index, agent_id in enumerate(decision_steps.agent_id):
             self.agent_to_lastaction[agent_id] = actions[agent_index]
 
+    def infer(self, behavior_name: str, n_episodes: int):
+        """Infer an agent over multiple episodes."""
+        for episode_index in tqdm(range(n_episodes)):
+            self.env.reset()
+            for step_index in range(self._max_episode_steps):
+                # Get the decision steps and terminal steps of the agents
+                decision_steps, terminal_steps = self.env.get_steps(
+                    behavior_name
+                )
+
+                # Check if there is a terminal step: the episode is over
+                if (len(terminal_steps) > 0) and (step_index > 0):
+                    self.episode_n_steps.append(step_index)
+                    break
+
+                if step_index % self._update_frequency == 0:
+                    actions = self._get_actions(decision_steps)
+                    self._store_actions(actions, decision_steps)
+                    action_tuple = ActionTuple()
+                    action_tuple.add_discrete(actions)
+                    self.env.set_actions(behavior_name, action_tuple)
+
+                # Perform a step in the simulation
+                self.env.step()
+
     def train(self, behavior_name: str, n_episodes: int):
         """Train an agent over multiple episodes."""
         for episode_index in tqdm(range(n_episodes)):
@@ -131,7 +156,7 @@ class Trainer:
             )
 
             if self._succeded_episodes > self._max_succeded_episodes:
-                print("Maximum number of succeded episodes reached.")
+                print("Max number of consecutive succeded episodes reached.")
                 break
 
     def _train_episode(self, behavior_name: str):
@@ -164,10 +189,13 @@ class Trainer:
             # Perform a step in the simulation
             self.env.step()
 
-            if step_index == self._max_episode_steps - 1:
-                self._succeded_episodes += 1
-                self.cumulative_rewards.append(self._max_episode_steps)
-                self.episode_n_steps.append(self._max_episode_steps)
+        if step_index == self._max_episode_steps - 1:
+            self._succeded_episodes += 1
+            self.cumulative_rewards.append(self._max_episode_steps)
+            self.episode_n_steps.append(self._max_episode_steps)
+
+        else:
+            self._succeded_episodes = 0
 
     def _update_model(self, agent_steps: List[Any]):
         """

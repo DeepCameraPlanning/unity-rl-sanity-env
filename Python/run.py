@@ -4,6 +4,7 @@ from omegaconf import DictConfig
 
 @hydra.main(config_path="configs/", config_name="config.yaml")
 def main(config: DictConfig):
+    from src.infer import infer
     from src.train import train
     from src.utils import utils
 
@@ -12,6 +13,9 @@ def main(config: DictConfig):
 
     if config.run_type == "train":
         train(config)
+
+    if config.run_type == "infer":
+        infer(config)
 
 
 if __name__ == "__main__":
