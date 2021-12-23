@@ -36,8 +36,10 @@ class DQNModule(LightningModule):
     :param eps_start: starting value of epsilon.
     :param eps_end: final value of epsilon.
     :param episode_length: max length of an episode.
-    :param lr_reduce_rate: learning rate reduction rate.
     :param warm_start_steps: max episode reward in the environment.
+    :param max_episodes: maximum number of episodes to run.
+    :param lr_reduce_rate: learning rate reduction rate.
+    :param weight_decay: weight decay value.
     :param run_type: train or infer.
     """
 
@@ -57,6 +59,7 @@ class DQNModule(LightningModule):
         eps_end: float,
         episode_length: int,
         warm_start_steps: int,
+        max_episodes: int,
         lr_reduce_rate: float,
         weight_decay: float,
         run_type: str,
@@ -89,6 +92,7 @@ class DQNModule(LightningModule):
         self.cumreward = 0
         self.episode_losses = []
         self.episode_index = 0
+        self.max_episodes = max_episodes
 
         if run_type == "train":
             self.populate(self._warm_start_steps)
@@ -214,6 +218,30 @@ class DQNModule(LightningModule):
                     sync_dist=True,
                 )
 
+    def test_step(self, batch: BatchTuple, nb_batch: int):
+        """Infer the model."""
+        device = self.get_device(batch)
+        epsilon = 0
+
+        # Step through environment with agent
+        reward, done = self.agent.play_step(self.net, epsilon, device)
+        self.cumreward += reward
+
+    def on_test_batch_start(
+        self, batch: BatchTuple, batch_idx: int, unused=0
+    ) -> int:
+        """Stop the test if the number of episode is reached."""
+        if self.episode_index == self.max_episodes:
+            print(
+                f"[Episode {self.episode_index}/{self.max_episodes}] ",
+                f"Cumreward: {self.cumreward}",
+            )
+            self.cumreward = 0
+            self.episode_index += 1
+            return -1
+
+        return 0
+
     def configure_optimizers(self) -> List[Optimizer]:
         """Initialize Adam optimizer."""
         optimizer = Adam(
@@ -243,6 +271,10 @@ class DQNModule(LightningModule):
     def train_dataloader(self) -> DataLoader:
         """Get train loader."""
         return self.__dataloader()
+
+    def test_dataloader(self) -> DataLoader:
+        """Generate an "empty" dataloader to start the test."""
+        return DataLoader(torch.ones(int(1e5), dtype=bool))
 
     def get_device(self, batch: BatchTuple) -> str:
         """Retrieve device currently being used by minibatch."""

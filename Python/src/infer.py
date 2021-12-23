@@ -29,13 +29,14 @@ def infer(config: DictConfig):
         lr_reduce_rate=config.model.lr_reduce_rate,
         weight_decay=config.model.weight_decay,
         run_type=config.run_type,
+        max_episodes=config.model.n_episodes,
     )
 
     trainer = Trainer(
         gpus=config.compnode.num_gpus,
         num_nodes=config.compnode.num_nodes,
         accelerator=config.compnode.accelerator,
-        max_epochs=config.model.n_episodes,
+        enable_progress_bar=False,
     )
     trainer.test(model, ckpt_path=config.model.checkpoint_path)
 
