@@ -60,6 +60,8 @@ public class CameraAgent : Agent
 
     private int maxEpisodeSteps;
     EnvironmentParameters resetParams;
+    
+    public float timeScaleValue=4.0f;
 
     public override void Initialize()
     {
@@ -82,7 +84,7 @@ public class CameraAgent : Agent
             M.receiveShadows = false;
         });
         mainModel.transform.localScale = Vector3.one * modelSize;
-
+        Time.timeScale=timeScaleValue;
     }
 
     public override void OnEpisodeBegin()
@@ -125,19 +127,19 @@ public class CameraAgent : Agent
     public override void Heuristic(in ActionBuffers actionsOut)
     {
         // // Heuristic method to test the env
-        // var discreteActionsOut = actionsOut.DiscreteActions;
-        // if (Input.GetKey("left"))
-        // {
-        //     discreteActionsOut[0] = 1;
+        var discreteActionsOut = actionsOut.DiscreteActions;
+        if (Input.GetKey("left"))
+        {
+            discreteActionsOut[0] = 1;
 
-        // }
-        // else if (Input.GetKey("right"))
-        // {
-        //     discreteActionsOut[0] = 0;
-        // }
-        // else discreteActionsOut[0] = 2;
-        var continuousActionsOut = actionsOut.ContinuousActions;
-        continuousActionsOut[0] = Input.GetAxis("Horizontal");
+        }
+        else if (Input.GetKey("right"))
+        {
+            discreteActionsOut[0] = 0;
+        }
+        else discreteActionsOut[0] = 2;
+        // var continuousActionsOut = actionsOut.ContinuousActions;
+        // continuousActionsOut[0] = Input.GetAxis("Horizontal");
     }
 
     private void initializeScene()
