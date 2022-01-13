@@ -1,0 +1,22 @@
+## Learning parameters
+
+# Params for optimizer
+learning_rate: 1e-3
+weight_decay: 1e-5
+
+sync_rate: 100  # Number of turns to copy weight from `eval_net` to target network
+replay_size: 1000
+warm_start_size: 1000
+eps_last_frame: 1000
+eps_start: 0.1
+eps_end: 0.01
+episode_length: 200
+warm_start_steps: 1000
+lr_reduce_rate: 0.99  # Learning rate reduction rate
+gamma: 0.9  # Reward reduction rate
+n_episodes: 10000
+
+load_checkpoint: true
+checkpoint_dir: ${root}/checkpoints
+checkpoint_path: null
+memory_filename: 2d_memory.npy
