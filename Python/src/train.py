@@ -5,6 +5,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning.loggers import WandbLogger
 
 from src.models.dqn_module import DQNModule
+from src.utils.progress_bar import LogBar
 
 
 def train(config: DictConfig):
@@ -25,6 +26,7 @@ def train(config: DictConfig):
         dirpath=config.model.checkpoint_dir,
         filename=config.xp_name + "-{epoch}",
     )
+    progressbar = LogBar()
     lr_monitor = LearningRateMonitor(logging_interval="epoch")
 
     # Initialize model
@@ -37,12 +39,10 @@ def train(config: DictConfig):
         gamma=config.model.gamma,
         sync_rate=config.model.sync_rate,
         replay_size=config.model.replay_size,
-        warm_start_size=config.model.warm_start_size,
         eps_last_frame=config.model.eps_last_frame,
         eps_start=config.model.eps_start,
         eps_end=config.model.eps_end,
         episode_length=config.model.episode_length,
-        warm_start_steps=config.model.warm_start_steps,
         lr_reduce_rate=config.model.lr_reduce_rate,
         weight_decay=config.model.weight_decay,
         run_type=config.run_type,
@@ -52,9 +52,10 @@ def train(config: DictConfig):
         gpus=config.compnode.num_gpus,
         num_nodes=config.compnode.num_nodes,
         accelerator=config.compnode.accelerator,
-        callbacks=[lr_monitor, checkpoint],
+        callbacks=[lr_monitor, checkpoint, progressbar],
         logger=wandb_logger,
         log_every_n_steps=5,
+        max_epochs=-1,
         # precision=16,
     )
 
