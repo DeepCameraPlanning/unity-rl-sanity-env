@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from src.models.modules.DQN import DQN
 from src.models.memory import ReplayBuffer, RLDataset
 from src.models.agent import Agent
-
+import time
 # batch = states, actions, rewards, dones, next_states
 BatchTuple = Tuple[
     torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
@@ -93,6 +93,10 @@ class DQNModule(LightningModule):
         self.episode_losses = []
         self.episode_index = 0
         self.max_episodes = max_episodes
+        self.step_index = 0
+        self.initTime=time.perf_counter()
+        self.nowTime=time.perf_counter()
+
 
         if run_type == "train":
             self.populate(self._warm_start_steps)
@@ -183,22 +187,26 @@ class DQNModule(LightningModule):
         # Soft update of target network
         if self.global_step % self._sync_rate == 0:
             self.target_net.load_state_dict(self.net.state_dict())
-
-        if done:
+        
+        self.nowTime=time.perf_counter()
+        # second condition 
+        if done or self.step_index==2000:
             logs = {
                 "episode/cumreward": torch.tensor(self.cumreward).to(device),
                 "episode/loss": torch.tensor(self.episode_losses).to(device),
                 "episode": torch.tensor(self.episode_index).to(device),
+                "episode/time": self.nowTime - self.initTime,
             }
             self.cumreward = 0
             self.episode_losses = []
             self.episode_index += 1
-
+            self.step_index = 0
         else:
             logs = {
                 "step/reward": torch.tensor(reward).to(device),
                 "step/loss": self.episode_losses[-1],
             }
+            self.step_index += 1
 
         outputs = OrderedDict({"loss": loss, "logs": logs})
         return outputs
@@ -231,6 +239,10 @@ class DQNModule(LightningModule):
         self, batch: BatchTuple, batch_idx: int, unused=0
     ) -> int:
         """Stop the test if the number of episode is reached."""
+        print(
+                f"[Episode {self.episode_index}/{self.max_episodes}] ",
+                f"Cumreward: {self.cumreward}",
+            )
         if self.episode_index == self.max_episodes:
             print(
                 f"[Episode {self.episode_index}/{self.max_episodes}] ",

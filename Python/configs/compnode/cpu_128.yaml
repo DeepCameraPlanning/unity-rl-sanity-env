@@ -1,5 +1,5 @@
 batch_size: 128
-num_workers: 10
+num_workers: 4
 num_gpus: 0
 num_nodes: 0
 accelerator: cpu
