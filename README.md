@@ -16,3 +16,11 @@ Version: `3.7.11`
 2. Run `python Python/run.py` to launch the training
 
 Note: if you have local file import troubles, check your `PYTHONPATH`.
+
+## Usage
+
+Command to train (with a well set up config):
+`python Python/run.py`
+
+Command to infer:
+`python Python/run.py run_type=infer model.checkpoint_path=path/to/checkoint.pt`

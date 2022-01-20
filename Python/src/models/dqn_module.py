@@ -4,6 +4,7 @@ from typing import List, Tuple
 from mlagents_envs.environment import UnityEnvironment
 from pytorch_lightning import LightningModule
 from pytorch_lightning.utilities import DistributedType
+from tqdm import tqdm
 import torch
 from torch import nn
 from torch.optim import Adam, Optimizer
@@ -13,6 +14,7 @@ from src.models.modules.DQN import DQN
 from src.models.memory import ReplayBuffer, RLDataset
 from src.models.agent import Agent
 import time
+import numpy as np
 # batch = states, actions, rewards, dones, next_states
 BatchTuple = Tuple[
     torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
@@ -22,63 +24,44 @@ BatchTuple = Tuple[
 class DQNModule(LightningModule):
     """Basic DQN Model.
 
-    :param batch_size: size of the batches.
-    :param lr: learning rate.
     :param env: Unity environment.
     :param behavior_name: name of the unity ml-agent behavior.
     :param n_actions: size of the action space.
-    :param gamma: discount factor.
-    :param sync_rate: how many frames do we update the target network.
+    :param run_type: train or infer.
+    :param batch_size: size of the batches.
     :param replay_size: capacity of the replay buffer.
-    :param warm_start_size: how many samples do we use to fill our buffer at
-        the start of training.
+    :param max_episodes: maximum number of episodes to run.
+    :param episode_length: max length of an episode.
     :param eps_last_frame: what frame should epsilon stop decaying.
     :param eps_start: starting value of epsilon.
     :param eps_end: final value of epsilon.
-    :param episode_length: max length of an episode.
-    :param warm_start_steps: max episode reward in the environment.
-    :param max_episodes: maximum number of episodes to run.
+    :param sync_rate: number of frames before updating the target network.
+    :param lr: learning rate.
     :param lr_reduce_rate: learning rate reduction rate.
+    :param gamma: discount factor.
     :param weight_decay: weight decay value.
-    :param run_type: train or infer.
     """
 
     def __init__(
         self,
-        batch_size: int,
-        lr: float,
         env: UnityEnvironment,
         behavior_name: str,
         n_actions: int,
-        gamma: float,
-        sync_rate: int,
+        run_type: str,
+        batch_size: int,
         replay_size: int,
-        warm_start_size: int,
+        max_episodes: int,
+        episode_length: int,
+        sync_rate: int,
         eps_last_frame: int,
         eps_start: float,
         eps_end: float,
-        episode_length: int,
-        warm_start_steps: int,
-        max_episodes: int,
+        lr: float,
         lr_reduce_rate: float,
+        gamma: float,
         weight_decay: float,
-        run_type: str,
     ):
         super().__init__()
-
-        self._batch_size = batch_size
-        self._lr = lr
-        self._gamma = gamma
-        self._sync_rate = sync_rate
-        self._replay_size = replay_size
-        self._warm_start_size = warm_start_size
-        self._eps_last_frame = eps_last_frame
-        self._eps_start = eps_start
-        self._eps_end = eps_end
-        self._episode_length = episode_length
-        self._warm_start_steps = warm_start_steps
-        self._lr_reduce_rate = lr_reduce_rate
-        self._weight_decay = weight_decay
 
         self.env = env
 
@@ -86,20 +69,37 @@ class DQNModule(LightningModule):
         self.target_net = DQN(n_actions)
         self.criterion = nn.MSELoss()
 
-        self.buffer = ReplayBuffer(self._replay_size)
-        self.agent = Agent(self.env, self.buffer, n_actions, behavior_name)
+        self._lr = lr
+        self._lr_reduce_rate = lr_reduce_rate
+        self._weight_decay = weight_decay
+        self._gamma = gamma
+        self._sync_rate = sync_rate
+        self._eps_last_frame = eps_last_frame
+        self._eps_start = eps_start
+        self._eps_end = eps_end
+
+        self._batch_size = batch_size
+        self.episode_length = episode_length
+        self.max_episodes = max_episodes
+
+        self.step_index = 0
+        self.episode_index = 0
         self.total_reward = 0
         self.cumreward = 0
         self.episode_losses = []
-        self.episode_index = 0
-        self.max_episodes = max_episodes
-        self.step_index = 0
         self.initTime=time.perf_counter()
         self.nowTime=time.perf_counter()
 
+        self.episode_q_values = []
+        self.episode_term = []
+        
+        self.episode_term_condition = 5
 
+        self._replay_size = replay_size
+        self.buffer = ReplayBuffer(replay_size)
+        self.agent = Agent(self.env, self.buffer, n_actions, behavior_name)
         if run_type == "train":
-            self.populate(self._warm_start_steps)
+            self.populate(self._replay_size)
 
     def populate(self, steps: int) -> None:
         """
@@ -108,7 +108,7 @@ class DQNModule(LightningModule):
 
         :param steps: number of random steps to populate the buffer with.
         """
-        for i in range(steps):
+        for i in tqdm(range(steps)):
             self.agent.play_step(self.net, epsilon=1.0, device="cpu")
 
     def forward(
@@ -129,7 +129,7 @@ class DQNModule(LightningModule):
         """Calculates the mse loss using a mini batch from the replay buffer.
 
         :param batch: current mini batch of replay data.
-        :return: loss.
+        :return: loss and batch averaged Q-value.
         """
         states, actions, rewards, dones, next_states = batch
 
@@ -154,7 +154,7 @@ class DQNModule(LightningModule):
             state_action_values, expected_state_action_values
         )
 
-        return loss
+        return loss, state_action_values.mean()
 
     def training_step(self, batch: BatchTuple, nb_batch: int) -> OrderedDict:
         """
@@ -176,35 +176,45 @@ class DQNModule(LightningModule):
         self.cumreward += reward
 
         # Calculates training loss
-        loss = self.dqn_mse_loss(batch)
-        if self.trainer._distrib_type in {
+        loss, q_value = self.dqn_mse_loss(batch)
+        if self._distrib_type in {
             DistributedType.DP,
             DistributedType.DDP2,
         }:
             loss = loss.unsqueeze(0)
+            q_value = q_value.unsqueeze(0)
         self.episode_losses.append(loss.detach())
+        self.episode_q_values.append(q_value.detach())
 
         # Soft update of target network
         if self.global_step % self._sync_rate == 0:
             self.target_net.load_state_dict(self.net.state_dict())
-        
-        self.nowTime=time.perf_counter()
-        # second condition 
-        if done or self.step_index==2000:
+
+        if self.step_index == self.episode_length:
+            self.episode_term.append(1)
+            done = True
+
+        if done:
+            self.nowTime=time.perf_counter()
+            self.episode_term.append(int(self.step_index == self.episode_length))
             logs = {
                 "episode/cumreward": torch.tensor(self.cumreward).to(device),
                 "episode/loss": torch.tensor(self.episode_losses).to(device),
+                "episode/q_value": torch.tensor(self.episode_q_values).to(device),
                 "episode": torch.tensor(self.episode_index).to(device),
                 "episode/time": self.nowTime - self.initTime,
+                "episode/episode_term": self.episode_term[-1],
             }
             self.cumreward = 0
+            self.step_index = 0
             self.episode_losses = []
             self.episode_index += 1
-            self.step_index = 0
+            self.agent.reset()
         else:
             logs = {
                 "step/reward": torch.tensor(reward).to(device),
                 "step/loss": self.episode_losses[-1],
+                "step/q_value": self.episode_q_values[-1],
             }
             self.step_index += 1
 
@@ -234,25 +244,21 @@ class DQNModule(LightningModule):
         # Step through environment with agent
         reward, done = self.agent.play_step(self.net, epsilon, device)
         self.cumreward += reward
+        self.step_index += 1
 
-    def on_test_batch_start(
-        self, batch: BatchTuple, batch_idx: int, unused=0
-    ) -> int:
-        """Stop the test if the number of episode is reached."""
-        print(
-                f"[Episode {self.episode_index}/{self.max_episodes}] ",
-                f"Cumreward: {self.cumreward}",
-            )
-        if self.episode_index == self.max_episodes:
+        if self.step_index == self.episode_length:
+            done = True
+            self.agent.reset()
+
+        if done:
             print(
-                f"[Episode {self.episode_index}/{self.max_episodes}] ",
+                f"[Episode {self.episode_index + 1}/{self.max_episodes}] ",
                 f"Cumreward: {self.cumreward}",
             )
             self.cumreward = 0
+            self.step_index = 0
+            self.episode_losses = []
             self.episode_index += 1
-            return -1
-
-        return 0
 
     def configure_optimizers(self) -> List[Optimizer]:
         """Initialize Adam optimizer."""
@@ -273,7 +279,7 @@ class DQNModule(LightningModule):
         """
         Initialize the Replay Buffer dataset used for retrieving experiences.
         """
-        dataset = RLDataset(self.buffer, self._episode_length)
+        dataset = RLDataset(self.buffer, self._replay_size)
         dataloader = DataLoader(
             dataset=dataset,
             batch_size=self._batch_size,
@@ -291,3 +297,13 @@ class DQNModule(LightningModule):
     def get_device(self, batch: BatchTuple) -> str:
         """Retrieve device currently being used by minibatch."""
         return batch[0].device.index if self.on_gpu else "cpu"
+    
+    # early stop condition
+    # def on_train_batch_start(self, batch: BatchTuple, batch_idx: int, unused=0) -> int:
+    #   if (len(self.episode_term)<=self.episode_term_condition):
+    #     return 0
+    #   if(np.sum(self.episode_term[-self.episode_term_condition:])==self.episode_term_condition):
+    #     print("[on_train_batch_start]: early stopping \n")
+    #     return -1
+    #   return 0
+      
