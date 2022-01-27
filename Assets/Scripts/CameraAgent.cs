@@ -46,9 +46,11 @@ public class CameraAgent : Agent
     public float modelSize;
     public Material mat;
     GameObject mainModel;
-
+    public GameObject Cube;
     private float obstacleTheta, mainTheta;
     private Vector3 obstacleRelative, mainRelative;
+
+    // radians
     private float obstacleAmplitude = 2.0f, mainAmplitude = 5.0f;
     // Keep `obstacleDirection = 1`, as the unit direction
     private float obstacleDirection = 1.0f, mainDirection = 2.0f;
@@ -60,8 +62,15 @@ public class CameraAgent : Agent
 
     private int maxEpisodeSteps;
     EnvironmentParameters resetParams;
+
+    // cube GO for changing color
+    private GameObject cube;
     
-    public float timeScaleValue=4.0f;
+    /**
+      timeScale controls playspeed of the anmiation
+      it seems impossible to augment it to infinity
+    */
+    public float timeScaleValue=5.0f;
 
     public override void Initialize()
     {
@@ -69,9 +78,9 @@ public class CameraAgent : Agent
         resetParams = Academy.Instance.EnvironmentParameters;
         main = gameObject.GetComponent<Camera>();
 
-        Application.targetFrameRate = 60;
-        renderTexture = new RenderTexture(Screen.width, Screen.height, 24);
-        screenShot = new Texture2D(Screen.width, Screen.height, TextureFormat.RGB24, false);
+        // Application.targetFrameRate = 30;
+        // renderTexture = new RenderTexture(Screen.width, Screen.height, 8);
+        // screenShot = new Texture2D(Screen.width, Screen.height, TextureFormat.RGB8, false);
 
         obstacleSpeed = obstacleDirection / speedNorm;
         mainSpeed = mainDirection / speedNorm;
@@ -102,6 +111,7 @@ public class CameraAgent : Agent
 
     public override void OnActionReceived(ActionBuffers actionBuffers)
     {
+        // do nothing if not reset
         // Update obstacle angle
         obstacleTheta += obstacleSpeed;
 
@@ -111,6 +121,8 @@ public class CameraAgent : Agent
         if (action == 0) mainTheta -= mainSpeed;
         else if (action == 1) mainTheta += mainSpeed;
         else if (action == 2) mainTheta = mainTheta;
+        
+        // TODO: Xi: seperate discrete and continous into two files and two classes would be cool
         // Continuous agent
         // mainTheta += mainSpeed * actionBuffers.ContinuousActions[0];
 
@@ -118,15 +130,15 @@ public class CameraAgent : Agent
 
         if (rewardCollision == -1)
         {
-            SetReward(-1.0f);
-            EndEpisode();
+          SetReward(-1.0f);
+          EndEpisode();
         }
         else SetReward(1.0f);
     }
 
     public override void Heuristic(in ActionBuffers actionsOut)
     {
-        // // Heuristic method to test the env
+        // Heuristic method to test the env
         var discreteActionsOut = actionsOut.DiscreteActions;
         if (Input.GetKey("left"))
         {
@@ -135,9 +147,11 @@ public class CameraAgent : Agent
         }
         else if (Input.GetKey("right"))
         {
-            discreteActionsOut[0] = 0;
+          discreteActionsOut[0] = 0;
         }
         else discreteActionsOut[0] = 2;
+
+        // continous case
         // var continuousActionsOut = actionsOut.ContinuousActions;
         // continuousActionsOut[0] = Input.GetAxis("Horizontal");
     }
@@ -160,23 +174,33 @@ public class CameraAgent : Agent
 
         // Compute obstacle and camera phases and relative positions
         float obstaclePhase = 2 * Mathf.PI * obstacleAngle;
+        float mainPhase     = 2 * Mathf.PI * mainAngle;
+
         obstacleRelative = new Vector3(Mathf.Cos(obstaclePhase), 0, Mathf.Sin(obstaclePhase));
-        float mainPhase = 2 * Mathf.PI * mainAngle;
-        mainRelative = new Vector3(Mathf.Cos(mainPhase), 0, Mathf.Sin(mainPhase));
+        mainRelative     = new Vector3(Mathf.Cos(mainPhase),     0, Mathf.Sin(mainPhase));
 
         // Update obstacle and camera positions
         obstacle.transform.position = head + obstacleAmplitude * obstacleRelative;
-        transform.position = head + mainAmplitude * mainRelative;
+        this.transform.position =     head +     mainAmplitude * mainRelative;
+        this.transform.LookAt(target.transform.position);
 
-        transform.LookAt(target.transform.position);
-        mainModel.transform.position = transform.position;
-        mainModel.transform.rotation = transform.rotation;
-
-        if (isColliding()) rewardCollision = -1;
-        else rewardCollision = 1;
+        mainModel.transform.position = this.transform.position;
+        mainModel.transform.rotation = this.transform.rotation;
+        
+        // a bit useless now, as the presentation time of the red color is too short
+        if (isColliding()) 
+        {
+          Cube.GetComponent<Renderer>().material.color = new Color(255, 0, 0);
+          rewardCollision = -1;
+        }
+        else  
+        { 
+          rewardCollision = 1;
+          Cube.GetComponent<Renderer>().material.color = new Color(0, 255, 0);
+        }
     }
 
-    private bool isColliding()
+    private bool isColliding(float colDegree=45f)
     {
         Vector3 head = target.transform.position;
         Vector3 hc = obstacle.transform.position - head;
@@ -187,6 +211,7 @@ public class CameraAgent : Agent
         Debug.DrawRay(head, hc);
         Debug.DrawRay(head, hd);
 
-        return angle < 45f;
+        return angle < colDegree;
     }
+
 }

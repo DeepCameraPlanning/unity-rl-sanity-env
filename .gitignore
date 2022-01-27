@@ -14,5 +14,5 @@ memory.npy
 __Pycache__
 checkpoints/
 outputs/
-/buildLin
 Python/buildMac
+Python/buildLin

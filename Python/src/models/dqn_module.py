@@ -14,7 +14,27 @@ from src.models.modules.DQN import DQN
 from src.models.memory import ReplayBuffer, RLDataset
 from src.models.agent import Agent
 import time
+import math
 import numpy as np
+
+def unit_vector(vector):
+    """ Returns the unit vector of the vector.  """
+    return vector / np.linalg.norm(vector)
+
+def angle_between(v1, v2):
+    """ Returns the angle in radians between vectors 'v1' and 'v2'::
+
+            >>> angle_between((1, 0, 0), (0, 1, 0))
+            1.5707963267948966
+            >>> angle_between((1, 0, 0), (1, 0, 0))
+            0.0
+            >>> angle_between((1, 0, 0), (-1, 0, 0))
+            3.141592653589793
+    """
+    v1_u = unit_vector(v1)
+    v2_u = unit_vector(v2)
+    return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
+  
 # batch = states, actions, rewards, dones, next_states
 BatchTuple = Tuple[
     torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
@@ -132,7 +152,7 @@ class DQNModule(LightningModule):
         :return: loss and batch averaged Q-value.
         """
         states, actions, rewards, dones, next_states = batch
-
+        
         state_action_values = (
             self.net(states[:, :3], states[:, 3:])
             .gather(1, actions.unsqueeze(-1))
@@ -166,15 +186,14 @@ class DQNModule(LightningModule):
         :return: training loss and log metrics.
         """
         device = self.get_device(batch)
-        epsilon = max(
-            self._eps_end,
-            self._eps_start - self.global_step + 1 / self._eps_last_frame,
-        )
-
+        
+        epsilon_delta = (self._eps_start - self._eps_end)/self._eps_last_frame
+        epsilon = max(self._eps_start - epsilon_delta * self.global_step, self._eps_end)
+        
         # Step through environment with agent
-        reward, done = self.agent.play_step(self.net, epsilon, device)
+        reward, done, _state= self.agent.play_step(self.net, epsilon, device)
         self.cumreward += reward
-
+        
         # Calculates training loss
         loss, q_value = self.dqn_mse_loss(batch)
         if self._distrib_type in {
@@ -202,8 +221,8 @@ class DQNModule(LightningModule):
                 "episode/loss": torch.tensor(self.episode_losses).to(device),
                 "episode/q_value": torch.tensor(self.episode_q_values).to(device),
                 "episode": torch.tensor(self.episode_index).to(device),
-                "episode/time": self.nowTime - self.initTime,
                 "episode/episode_term": self.episode_term[-1],
+                "episode/epsilon": epsilon,
             }
             self.cumreward = 0
             self.step_index = 0
@@ -215,6 +234,15 @@ class DQNModule(LightningModule):
                 "step/reward": torch.tensor(reward).to(device),
                 "step/loss": self.episode_losses[-1],
                 "step/q_value": self.episode_q_values[-1],
+                "obs/angle": angle_between(_state[:3], _state[3:]), 
+                "obs/cubex": _state[0],
+                "obs/cubey": _state[2],
+                "obs/camerax": _state[3],
+                "obs/cameray": _state[5],
+                # "obs/cubeTheta": math.acos(_state[0]), 
+                # "obs/camTheta": math.acos(_state[3]),
+                # "obs/diffTheta": math.acos(_state[0])-math.acos(_state[3]),
+                # "obs/global_step":self.global_step,
             }
             self.step_index += 1
 
@@ -297,13 +325,4 @@ class DQNModule(LightningModule):
     def get_device(self, batch: BatchTuple) -> str:
         """Retrieve device currently being used by minibatch."""
         return batch[0].device.index if self.on_gpu else "cpu"
-    
-    # early stop condition
-    # def on_train_batch_start(self, batch: BatchTuple, batch_idx: int, unused=0) -> int:
-    #   if (len(self.episode_term)<=self.episode_term_condition):
-    #     return 0
-    #   if(np.sum(self.episode_term[-self.episode_term_condition:])==self.episode_term_condition):
-    #     print("[on_train_batch_start]: early stopping \n")
-    #     return -1
-    #   return 0
       

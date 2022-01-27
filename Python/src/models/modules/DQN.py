@@ -19,9 +19,10 @@ class DQN(nn.Module):
             nn.Linear(3, 64),
             nn.ReLU(),
         )
-
         self.fuse_fc = nn.Sequential(
-            nn.Linear(128, 64), nn.ReLU(), nn.Linear(64, n_actions)
+            nn.Linear(128, 64), 
+            nn.ReLU(), 
+            nn.Linear(64, n_actions)
         )
 
     def forward(

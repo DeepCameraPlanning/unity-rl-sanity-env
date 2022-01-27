@@ -32,16 +32,11 @@ def train(config: DictConfig):
     progressbar = LogBar()
     lr_monitor = LearningRateMonitor(logging_interval="epoch")
 
-    # TODO: override earlystop on stopping condition
     # current settting is too tricky
-    earlystop = EarlyStopping(monitor="step/loss", mode="min", patience=2000*2, min_delta = 0.001, check_on_train_epoch_end=True, strict=False)
-    
-    class MyPrintingCallback(Callback):
-      def on_train_start(self, trainer, pl_module):
-          print("Training is starting")
-
-      def on_train_end(self, trainer, pl_module):
-          print("Training is ending")
+    # evaluating consecutive successful steps ..
+    # should be working on Q-value
+    # TODO: Xi: revise it to Q-value
+    earlystop = EarlyStopping(monitor="step/loss", mode="min", patience=config.model.episode_length*2, min_delta = 0.001, check_on_train_epoch_end=True, strict=False)
         
     # Initialize model
     model = DQNModule(
@@ -66,10 +61,10 @@ def train(config: DictConfig):
         gpus=config.compnode.num_gpus,
         num_nodes=config.compnode.num_nodes,
         accelerator=config.compnode.accelerator,
-        callbacks=[lr_monitor, checkpoint, progressbar, earlystop, MyPrintingCallback()],
+        callbacks=[lr_monitor, checkpoint, progressbar],
         logger=wandb_logger,
         log_every_n_steps=5,
-        max_epochs=config.model.n_episodes*2000,
+        max_steps=config.model.n_episodes*config.model.episode_length, # TODO: Xi: change it to episode??
         # precision=16,
     )
 

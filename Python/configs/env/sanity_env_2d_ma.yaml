@@ -1,0 +1,3 @@
+path: ${root}/buildMac/sanityEnv5x_MultiAgents
+display: false
+num_actions: 2

@@ -17,6 +17,6 @@ public class CameraControl : MonoBehaviour
     void LateUpdate()
     {
         this.transform.position = FocusTarget.position + target2Me;
-        this.transform.LookAt(FocusTarget.position);
+        // this.transform.LookAt(FocusTarget.position);
     }
 }

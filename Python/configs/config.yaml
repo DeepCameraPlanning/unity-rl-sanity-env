@@ -1,7 +1,7 @@
 defaults:
   - _self_
   - model: dqn.yaml
-  - env: sanity_env_2d
+  - env: sanity_env_2d_ma
   - compnode: cpu_128
 
 # Type of run to launch (current: train, TODO: debug/eval/infer/...)
@@ -17,9 +17,10 @@ log_dir: ${root}/Logs
 test_dir: ${root}/tests
 
 # Name of the project is accessed by loggers
+# project_name: camera-planning-MLagent
 project_name: camera-planning
 # Name of the run is accessed by loggers
-xp_name: perf_sanity_v01_cpu
+xp_name: v01_MultipleAgent_EndEpisode_Automatic_AnyDone
 # Wether to synced the logs or not (WandB)
 log_offline: false
 
