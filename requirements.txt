@@ -6,3 +6,5 @@ rich==10.16.1
 torch==1.8.0
 tqdm==4.62.3
 wandb==0.12.9
+plotly
+pytorch-lightning
