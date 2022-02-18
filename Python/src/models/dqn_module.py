@@ -13,8 +13,13 @@ from torch.utils.data import DataLoader
 from src.models.modules.DQN import DQN
 from src.models.memory import ReplayBuffer, RLDataset
 from src.models.agent import Agent
+import src.utils.utils as utils
+from src.models.modules.modelUtils import versionControl
 import time
+import math
 import numpy as np
+import wandb
+ 
 # batch = states, actions, rewards, dones, next_states
 BatchTuple = Tuple[
     torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
@@ -65,8 +70,10 @@ class DQNModule(LightningModule):
 
         self.env = env
 
-        self.net = DQN(n_actions)
-        self.target_net = DQN(n_actions)
+        self.net = \
+          versionControl.current_model(n_actions)
+        self.target_net = \
+          versionControl.current_model(n_actions)
         self.criterion = nn.MSELoss()
 
         self._lr = lr
@@ -87,14 +94,9 @@ class DQNModule(LightningModule):
         self.total_reward = 0
         self.cumreward = 0
         self.episode_losses = []
-        self.initTime=time.perf_counter()
-        self.nowTime=time.perf_counter()
-
         self.episode_q_values = []
-        self.episode_term = []
+        self.episode_success = []
         
-        self.episode_term_condition = 5
-
         self._replay_size = replay_size
         self.buffer = ReplayBuffer(replay_size)
         self.agent = Agent(self.env, self.buffer, n_actions, behavior_name)
@@ -132,17 +134,18 @@ class DQNModule(LightningModule):
         :return: loss and batch averaged Q-value.
         """
         states, actions, rewards, dones, next_states = batch
+        obs, cam = versionControl.current_interpreter(states)
 
         state_action_values = (
-            self.net(states[:, :3], states[:, 3:])
+            self.net(obs, cam)
             .gather(1, actions.unsqueeze(-1))
             .squeeze(-1)
         )
 
         with torch.no_grad():
-            next_state_values = self.target_net(
-                next_states[:, :3], next_states[:, 3:]
-            ).max(1)[0]
+            next_obs, next_cam = versionControl.current_interpreter(next_states)
+            next_state_values  = self.target_net(next_obs, next_cam).max(1)[0]
+            
             next_state_values[dones] = 0.0
             next_state_values = next_state_values.detach()
 
@@ -166,15 +169,16 @@ class DQNModule(LightningModule):
         :return: training loss and log metrics.
         """
         device = self.get_device(batch)
+        
         epsilon = max(
             self._eps_end,
             self._eps_start - self.global_step + 1 / self._eps_last_frame,
         )
-
+        
+        epsilon=0.1
         # Step through environment with agent
-        reward, done = self.agent.play_step(self.net, epsilon, device)
+        reward, done, _state= self.agent.play_step(self.net, epsilon, device)
         self.cumreward += reward
-
         # Calculates training loss
         loss, q_value = self.dqn_mse_loss(batch)
         if self._distrib_type in {
@@ -189,21 +193,19 @@ class DQNModule(LightningModule):
         # Soft update of target network
         if self.global_step % self._sync_rate == 0:
             self.target_net.load_state_dict(self.net.state_dict())
-
+            
         if self.step_index == self.episode_length:
-            self.episode_term.append(1)
-            done = True
-
+           done = True
+           
         if done:
-            self.nowTime=time.perf_counter()
-            self.episode_term.append(int(self.step_index == self.episode_length))
+            self.episode_success.append(int(self.step_index == self.episode_length))
             logs = {
                 "episode/cumreward": torch.tensor(self.cumreward).to(device),
                 "episode/loss": torch.tensor(self.episode_losses).to(device),
                 "episode/q_value": torch.tensor(self.episode_q_values).to(device),
                 "episode": torch.tensor(self.episode_index).to(device),
-                "episode/time": self.nowTime - self.initTime,
-                "episode/episode_term": self.episode_term[-1],
+                "episode/episode_success": self.episode_success[-1],
+                "episode/epsilon": epsilon,
             }
             self.cumreward = 0
             self.step_index = 0
@@ -215,6 +217,7 @@ class DQNModule(LightningModule):
                 "step/reward": torch.tensor(reward).to(device),
                 "step/loss": self.episode_losses[-1],
                 "step/q_value": self.episode_q_values[-1],
+                # "obs/angle": utils.angle_between(_state[:3], _state[3:]),           
             }
             self.step_index += 1
 
@@ -240,25 +243,44 @@ class DQNModule(LightningModule):
         """Infer the model."""
         device = self.get_device(batch)
         epsilon = 0
-
+        self.episode_success = []
         # Step through environment with agent
-        reward, done = self.agent.play_step(self.net, epsilon, device)
+        reward, done, _state = self.agent.play_step(self.net, epsilon, device)
         self.cumreward += reward
         self.step_index += 1
+        # loss, q_value = self.dqn_mse_loss(batch)
 
         if self.step_index == self.episode_length:
             done = True
-            self.agent.reset()
-
+            
         if done:
+            self.episode_success.append(int(self.step_index == self.episode_length))
             print(
                 f"[Episode {self.episode_index + 1}/{self.max_episodes}] ",
                 f"Cumreward: {self.cumreward}",
             )
+            
+            logs= {
+                    "episode/cumreward": torch.tensor(self.cumreward).to(device),
+                    # "episode/q_value": torch.tensor(self.episode_q_values).to(device),
+                    "episode": torch.tensor(self.episode_index).to(device),
+                    "episode/episode_success": self.episode_success[-1],
+                  }            
             self.cumreward = 0
             self.step_index = 0
-            self.episode_losses = []
+            # self.episode_losses = []
             self.episode_index += 1
+            self.agent.reset()
+        else:
+            logs = {
+                "step/reward": torch.tensor(reward).to(device),
+                # "step/loss": self.episode_losses[-1],
+                # "step/q_value": self.episode_q_values[-1],
+                # "obs/angle":  utils.angle_between(_state[:3], _state[3:]), 
+            }
+            
+        wandb.log(logs)
+        # self.logger.experiment.log_metrics()
 
     def configure_optimizers(self) -> List[Optimizer]:
         """Initialize Adam optimizer."""
@@ -297,13 +319,4 @@ class DQNModule(LightningModule):
     def get_device(self, batch: BatchTuple) -> str:
         """Retrieve device currently being used by minibatch."""
         return batch[0].device.index if self.on_gpu else "cpu"
-    
-    # early stop condition
-    # def on_train_batch_start(self, batch: BatchTuple, batch_idx: int, unused=0) -> int:
-    #   if (len(self.episode_term)<=self.episode_term_condition):
-    #     return 0
-    #   if(np.sum(self.episode_term[-self.episode_term_condition:])==self.episode_term_condition):
-    #     print("[on_train_batch_start]: early stopping \n")
-    #     return -1
-    #   return 0
       

@@ -44,6 +44,8 @@ class ReplayBuffer:
         self.buffer.append(experience)
 
     def sample(self, batch_size: int) -> Tuple:
+        # import ipdb
+        # ipdb.set_trace()
         indices = np.random.choice(len(self.buffer), batch_size, replace=False)
         states, actions, rewards, dones, next_states = zip(
             *(self.buffer[idx] for idx in indices)

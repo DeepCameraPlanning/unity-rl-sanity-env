@@ -28,7 +28,9 @@ class Model(nn.Module):
         )
 
         self.C_value = nn.Sequential(
-            nn.Linear(128, 64), nn.ReLU(), nn.Linear(64, action_size)
+            nn.Linear(128, 64), 
+            nn.ReLU(), 
+            nn.Linear(64, action_size)
         )
 
     def forward(self, env, position):
@@ -230,3 +232,45 @@ class DQN(object):
             self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
             self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
             self.learn_step_counter = checkpoint["learn_step_count"]
+
+
+# class Model(nn.Module):
+#     def __init__(self, action_size):
+#         '''
+#         I first try to use occupancy map, but the training result is so bad.
+#         Thus I replace it with a more intuitive input : position of cube.
+#         Input : cube position (x, y, z), camera position (x, y, z), both on local space
+#         '''
+
+#         super(Model, self).__init__()
+
+#         self.env_encoder = nn.Sequential(
+#             nn.Conv3d(in_channels=1, out_channels=8,  kernel_size=3, stride=2, padding=1),
+#             nn.ReLU(),
+#             nn.Conv3d(in_channels=8, out_channels=16, kernel_size=3, stride=2, padding=1),
+#             nn.ReLU(),
+#         )
+#         self.env_fc = nn.Sequential(
+#             nn.Linear(128, 64),
+#             nn.ReLU()
+#         )
+
+#         self.position_fc = nn.Sequential(
+#             nn.Linear(4, 64),
+#             nn.ReLU(),
+#         )
+
+#         self.C_value = nn.Sequential(
+#             nn.Linear(128, 64),
+#             nn.ReLU(),
+#             nn.Linear(64, action_size)
+#         )
+
+#     def forward(self, env, position):
+#         batch_size = env.size(0)
+#         env = self.env_encoder(env).view(batch_size, -1)
+#         env = self.env_fc(env)
+
+#         pos = self.position_fc(position)
+
+#         return self.C_value(torch.cat([env, pos], axis=1))

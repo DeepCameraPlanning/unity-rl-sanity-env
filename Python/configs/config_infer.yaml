@@ -1,12 +1,12 @@
 defaults:
   - _self_
-  - model: dqn.yaml
-  - env: sanity_env_2d
+  - model: dqn_infer.yaml
+  - env: sanity_env_2d_infer_0.yaml
   - compnode: cpu_128
 
 # Type of run to launch (current: train, TODO: debug/eval/infer/...)
 # run_type: infer
-run_type: train
+run_type: infer
 
 root: ${hydra:runtime.cwd}
 # Path to folder with outputs and logs
@@ -17,9 +17,9 @@ log_dir: ${root}/Logs
 test_dir: ${root}/tests
 
 # Name of the project is accessed by loggers
-project_name: useless
+project_name: MLagentTimeEval
 # Name of the run is accessed by loggers
-xp_name: sanityCheck_currentModel
+xp_name: eval_multipleAgent_1hr
 # Wether to synced the logs or not (WandB)
 log_offline: false
 

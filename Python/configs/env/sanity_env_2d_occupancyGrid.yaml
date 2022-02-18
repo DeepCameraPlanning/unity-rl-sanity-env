@@ -1,0 +1,6 @@
+# path: ${root}/buildMac/OccupancyGrid/sanityEnv5xOccupancyGrid_serverBuild.app
+# path: ${root}/buildMac/OccupancyGrid/sanityEnv5xOccupancyGrid_background.app
+path: ${root}/buildMac/OccupancyGrid/OG_DebugOn.app
+
+display: true
+num_actions: 2

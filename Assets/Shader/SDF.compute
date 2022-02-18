@@ -1,0 +1,50 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel Conv3D
+
+
+
+StructuredBuffer<float> occupancy_grid;
+
+RWStructuredBuffer<float> SDF;
+
+int _GridWidth;
+int _GridHeight;
+int _GridDepth;
+
+int kernelSize;
+
+[numthreads(8,8,8)]
+void Conv3D (uint3 id : SV_DispatchThreadID)
+{
+    
+    if (id.x >= _GridWidth || id.y >= _GridHeight || id.z >= _GridDepth) return;
+
+
+    int kernelHalfSize = floor(kernelSize/2);
+
+    float sum = 0;
+
+    int cellNb = 0;
+
+    for (int i = 0; i < kernelSize; i++) {
+        for (int j = 0; j < kernelSize; j++) {
+            for (int k = 0; k < kernelSize; k++) {
+                int a = id.x-kernelHalfSize+i;
+                int b = id.y-kernelHalfSize+j;
+                int c = id.z-kernelHalfSize+k;
+                
+                if ((a >= 0 && a < _GridWidth) && (b >= 0 && b < _GridHeight) && (c >= 0 && c < _GridDepth)) {
+                    cellNb ++;
+
+                    int idx = a + _GridWidth * (b + _GridHeight * c);
+
+                    sum += occupancy_grid[idx];
+
+                }
+            }
+        }
+    }
+
+    int voxelIdx = id.x + _GridWidth * (id.y + _GridHeight * id.z);
+    SDF[voxelIdx] = (float)sum/(float)cellNb;
+}

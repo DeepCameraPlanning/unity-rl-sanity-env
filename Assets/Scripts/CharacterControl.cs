@@ -65,7 +65,7 @@ public class CharacterControl : MonoBehaviour
     //{
     //    if (headLookAtWhenTalking && avatar.GetCurrentAnimatorStateInfo(0).IsTag("Talking"))
     //    {
-    //        avatar.SetLookAtPosition(headLookAtWhenTalking.position);
+    //        avatar.SetLookAtPosition(headLookAtWhenTalking.localPosition);
     //        avatar.SetLookAtWeight(1);
     //    }
     //    else
@@ -92,16 +92,16 @@ public class CharacterControl : MonoBehaviour
             && targetWaypoint) // 走到最后一个Waypoint后TargetWaypoint为null，但是walk里的逻辑还尝试访问TargetWaypoint，导致报错
         {
             // 忽略y计算距离
-            float distanceX = targetWaypoint.transform.position.x - avatar.rootPosition.x;
-            float distanceZ = targetWaypoint.transform.position.z - avatar.rootPosition.z;
-            Vector3 waypointPosition = targetWaypoint.transform.position;
+            float distanceX = targetWaypoint.transform.localPosition.x - avatar.rootPosition.x;
+            float distanceZ = targetWaypoint.transform.localPosition.z - avatar.rootPosition.z;
+            Vector3 waypointPosition = targetWaypoint.transform.localPosition;
             Vector3 characterPosition = avatar.rootPosition;
-            //float distanceToTarget = Vector3.SqrMagnitude(targetWaypoint.transform.position - avatar.rootPosition);
+            //float distanceToTarget = Vector3.SqrMagnitude(targetWaypoint.transform.localPosition - avatar.rootPosition);
             float distanceToTarget = Mathf.Sqrt(distanceX * distanceX + distanceZ * distanceZ);
             if (distanceToTarget > targetWaypoint.Range)
             {
                 Vector3 curentDir = avatar.rootRotation * Vector3.forward;
-                Vector3 wantedDir = (targetWaypoint.transform.position - avatar.rootPosition).normalized;
+                Vector3 wantedDir = (targetWaypoint.transform.localPosition - avatar.rootPosition).normalized;
 
                 if (Vector3.Dot(curentDir, wantedDir) > 0)
                 {
@@ -125,7 +125,7 @@ public class CharacterControl : MonoBehaviour
                 if (targetWaypoint.BodyLookAt)
                 {
                     // TODO: turnDestination为0向量的保护
-                    turnDestination = targetWaypoint.BodyLookAt.position - targetWaypoint.transform.position;
+                    turnDestination = targetWaypoint.BodyLookAt.localPosition - targetWaypoint.transform.localPosition;
                     turnDestination.y = 0;
                 }
                 else
@@ -165,7 +165,7 @@ public class CharacterControl : MonoBehaviour
                 avatar.SetBool("Turn", false);
                 if (targetWaypoint)
                 {
-                    Vector3 wantedDir = (targetWaypoint.transform.position - avatar.rootPosition).normalized;
+                    Vector3 wantedDir = (targetWaypoint.transform.localPosition - avatar.rootPosition).normalized;
                     avatar.SetFloat("MoveStartAngle", (Vector3.Cross(curentDir, wantedDir).y > 0 ? 1 : -1) * Vector3.Angle(curentDir, wantedDir), 0, Time.deltaTime);
                 }
                 // 如果在avatar.SetBool("Turn", true)时就掉用UpdateMoveType()，则跑走的最后几帧速度就不对了
@@ -190,8 +190,8 @@ public class CharacterControl : MonoBehaviour
     void LateUpdate()
     {
         // HACK:不知道为什么，有时候角色得高度会改变，这里强制让角色始终保持高度一致
-        Vector3 position = this.transform.position;
+        Vector3 position = this.transform.localPosition;
         position.y = 0;
-        this.transform.position = position;
+        this.transform.localPosition = position;
     }
 }

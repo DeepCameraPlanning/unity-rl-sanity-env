@@ -12,7 +12,8 @@ from src.utils.progress_bar import LogBar
 
 
 def train(config: DictConfig):
-    env = UnityEnvironment(config.env.path, no_graphics=not config.env.display)
+    env = UnityEnvironment(config.env.path, no_graphics=not config.env.display, additional_args=["-batchmode"])
+    # env = UnityEnvironment(config.env.path, no_graphics=not config.env.display)
     env.reset()
     behavior_name = list(env.behavior_specs)[0]
 
@@ -35,13 +36,6 @@ def train(config: DictConfig):
     # TODO: override earlystop on stopping condition
     # current settting is too tricky
     earlystop = EarlyStopping(monitor="step/loss", mode="min", patience=2000*2, min_delta = 0.001, check_on_train_epoch_end=True, strict=False)
-    
-    class MyPrintingCallback(Callback):
-      def on_train_start(self, trainer, pl_module):
-          print("Training is starting")
-
-      def on_train_end(self, trainer, pl_module):
-          print("Training is ending")
         
     # Initialize model
     model = DQNModule(
@@ -62,14 +56,17 @@ def train(config: DictConfig):
         run_type=config.run_type,
         max_episodes=config.model.n_episodes,
     )
+
+
     trainer = Trainer(
         gpus=config.compnode.num_gpus,
         num_nodes=config.compnode.num_nodes,
         accelerator=config.compnode.accelerator,
-        callbacks=[lr_monitor, checkpoint, progressbar, earlystop, MyPrintingCallback()],
+        # callbacks=[lr_monitor, checkpoint, progressbar, earlystop, MyPrintingCallback()],
+        callbacks=[lr_monitor, checkpoint, progressbar],
         logger=wandb_logger,
         log_every_n_steps=5,
-        max_epochs=config.model.n_episodes*2000,
+        max_steps=config.model.n_episodes*config.model.episode_length,
         # precision=16,
     )
 

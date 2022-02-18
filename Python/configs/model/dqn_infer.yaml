@@ -5,16 +5,18 @@ learning_rate: 1e-3
 weight_decay: 1e-5
 
 sync_rate: 100  # Number of turns to copy weight from `eval_net` to target network -> Q_iteration
-replay_size: 5000
+replay_size: 1000
 lr_reduce_rate: 0.99  # Learning rate reduction rate
 eps_last_frame: 1000
 eps_start: 0.1
 eps_end: 0.01
-n_episodes: 200
+n_episodes: 5
 episode_length: 2000
 gamma: 0.9  # Reward reduction rate
 
-load_checkpoint: false
+load_checkpoint: true
 checkpoint_dir: ${root}/checkpoints
-checkpoint_path: 
+checkpoint_path: /Users/triocrossing/INRIA/UnityProjects/DQN_PL/unity-rl-sanity-env/Python/checkpoints/fromIgrida/checkpoints/1hr/ma_1hr.ckpt
+# checkpoint_path: /Users/triocrossing/INRIA/UnityProjects/DQN_PL/unity-rl-sanity-env/Python/checkpoints/fromIgrida/checkpoints/multipleAgent/last.ckpt
+# checkpoint_path: 
 memory_filename: 2d_memory.npy

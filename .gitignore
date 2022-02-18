@@ -16,3 +16,6 @@ checkpoints/
 outputs/
 /buildLin
 Python/buildMac
+*.meta
+
+

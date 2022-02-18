@@ -46,9 +46,11 @@ public class CameraAgent : Agent
     public float modelSize;
     public Material mat;
     GameObject mainModel;
-
+    // public GameObject Cube;
     private float obstacleTheta, mainTheta;
     private Vector3 obstacleRelative, mainRelative;
+
+    // radians
     private float obstacleAmplitude = 2.0f, mainAmplitude = 5.0f;
     // Keep `obstacleDirection = 1`, as the unit direction
     private float obstacleDirection = 1.0f, mainDirection = 2.0f;
@@ -58,10 +60,14 @@ public class CameraAgent : Agent
 
     private float rewardCollision;
 
-    private int maxEpisodeSteps;
+    public int recordedStep=0;
     EnvironmentParameters resetParams;
+
+    public int cubePolicy = 0;
     
-    public float timeScaleValue=4.0f;
+    public float timeScaleValue=1.0f;
+    
+    public float RaycastDist = 5.0f;
 
     public override void Initialize()
     {
@@ -69,9 +75,9 @@ public class CameraAgent : Agent
         resetParams = Academy.Instance.EnvironmentParameters;
         main = gameObject.GetComponent<Camera>();
 
-        Application.targetFrameRate = 60;
-        renderTexture = new RenderTexture(Screen.width, Screen.height, 24);
-        screenShot = new Texture2D(Screen.width, Screen.height, TextureFormat.RGB24, false);
+        // Application.targetFrameRate = 30;
+        // renderTexture = new RenderTexture(Screen.width, Screen.height, 24);
+        // screenShot = new Texture2D(Screen.width, Screen.height, TextureFormat.RGB24, false);
 
         obstacleSpeed = obstacleDirection / speedNorm;
         mainSpeed = mainDirection / speedNorm;
@@ -85,23 +91,85 @@ public class CameraAgent : Agent
         });
         mainModel.transform.localScale = Vector3.one * modelSize;
         Time.timeScale=timeScaleValue;
+        Application.runInBackground=true;
+        // Display.displays[0].Deactivate();
     }
 
     public override void OnEpisodeBegin()
     {
         // Initialize the camera and cube position
         this.initializeScene();
+        recordedStep=0;
     }
 
     public override void CollectObservations(VectorSensor sensor)
     {
         // Get camera and obstacle relative positions
-        sensor.AddObservation(obstacleRelative);
         sensor.AddObservation(mainRelative);
+        // sensor.AddObservation(obstacleRelative);
+        
+        // Debug.Log("cube pos : (" + CM[0]+","+CM[1]+","+CM[2]+",)");
+
+        var vox = GameObject.Find("OccupancyGrid").GetComponent<Voxelizer>();
+        float[] outArray = vox.outArray;
+        Vector3 outDim = vox.outDim;
+        // Debug.Log("received [" + outArray.Length.ToString() + "] elements in the array");
+        sensor.AddObservation(outDim);
+        // Debug.Log("dim: "+ outDim.ToString());
+        // Console.WriteLine("dim: "+ outDim.ToString());
+        sensor.AddObservation(outArray);
+    }
+
+    // cube Policy from simulator -> server
+
+    // policy 0 -> clockwise (as training)
+    // policy 1 -> anti-clockwise (testing balance)
+
+    // policy 2 -> moving speed level 1 (slowest)
+    // policy 3 -> moving speed level 2 
+    // policy 4 -> moving speed level 3 
+    // policy 5 -> moving speed level 4 (fastest) 
+    // policy 6 -> random walk??
+    public void updateCubeSpeed()
+    {
+      // Update obstacle angle
+      int veloAmp=100;
+      switch (cubePolicy)
+      {
+        case 0:
+            obstacleSpeed = obstacleDirection / speedNorm;
+          break;
+
+        case 1:
+            obstacleSpeed = - obstacleDirection / speedNorm;
+          break;
+
+        case 2:
+            obstacleSpeed = veloAmp*Mathf.Sin(recordedStep/(speedNorm*20f)*Mathf.PI)/speedNorm;
+          break;
+
+        case 3:
+            obstacleSpeed = veloAmp*Mathf.Sin(recordedStep/(speedNorm*15f)*Mathf.PI)/speedNorm;
+          break;
+
+        case 4:
+            obstacleSpeed = veloAmp*Mathf.Sin(recordedStep/(speedNorm*12f)*Mathf.PI)/speedNorm;
+          break;
+
+        case 5:
+            obstacleSpeed = veloAmp*Mathf.Sin(recordedStep/(speedNorm*10f)*Mathf.PI)/speedNorm;
+          break;
+
+        case 6:
+            obstacleSpeed = veloAmp*Mathf.Sin(recordedStep/10f*Mathf.PI)/speedNorm;
+          break;
+      }
     }
 
     public override void OnActionReceived(ActionBuffers actionBuffers)
     {
+        recordedStep+=1;
+        updateCubeSpeed();
         // Update obstacle angle
         obstacleTheta += obstacleSpeed;
 
@@ -114,7 +182,7 @@ public class CameraAgent : Agent
         // Continuous agent
         // mainTheta += mainSpeed * actionBuffers.ContinuousActions[0];
 
-        updateState(mainTheta, obstacleTheta);
+        updateState(mainTheta, obstacleTheta, false);
 
         if (rewardCollision == -1)
         {
@@ -150,11 +218,11 @@ public class CameraAgent : Agent
             obstacleTheta = Random.Range(0, 1.0f);
             mainTheta = Random.Range(0, 1.0f);
 
-            updateState(mainTheta, obstacleTheta);
+            updateState(mainTheta, obstacleTheta, true);
         }
     }
 
-    private void updateState(float mainAngle, float obstacleAngle)
+    private void updateState(float mainAngle, float obstacleAngle, bool init)
     {
         Vector3 head = target.transform.position;
 
@@ -166,14 +234,34 @@ public class CameraAgent : Agent
 
         // Update obstacle and camera positions
         obstacle.transform.position = head + obstacleAmplitude * obstacleRelative;
-        transform.position = head + mainAmplitude * mainRelative;
+        transform.position          = head + mainAmplitude * mainRelative;
 
         transform.LookAt(target.transform.position);
         mainModel.transform.position = transform.position;
         mainModel.transform.rotation = transform.rotation;
-
-        if (isColliding()) rewardCollision = -1;
-        else rewardCollision = 1;
+        
+        if(init)
+        {
+          if (isColliding()) 
+          {
+            rewardCollision = -1;
+          }
+          else 
+          {
+            rewardCollision = 1;
+          }
+        }
+        else{
+          if (isCollidingRC()) 
+          {
+            rewardCollision = -1;
+          }
+          else 
+          {
+            rewardCollision = 1;
+          }
+        }
+        // isCollidingRC();
     }
 
     private bool isColliding()
@@ -181,12 +269,33 @@ public class CameraAgent : Agent
         Vector3 head = target.transform.position;
         Vector3 hc = obstacle.transform.position - head;
         Vector3 hd = transform.position - head;
-
+        
         float angle = Vector3.Angle(hc, hd);
 
         Debug.DrawRay(head, hc);
         Debug.DrawRay(head, hd);
 
         return angle < 45f;
+    }
+
+    private bool isCollidingRC()
+    {
+        RaycastHit hit;
+        // Bit shift the index of the layer (3) to get a bit mask
+        int layerObs = 1 << 3;
+
+        Vector3 dirRC = (target.transform.position - transform.position).normalized;
+        if (Physics.Raycast(transform.position, dirRC, out hit, RaycastDist, layerObs))
+        {
+            Debug.DrawRay(transform.position, dirRC * hit.distance, Color.red);
+            // Debug.Log("Did Hit");
+            return true;
+        }
+        else
+        {
+            Debug.DrawRay(transform.position, dirRC * RaycastDist, Color.green);
+            // Debug.Log("Did not Hit");
+            return false;
+        }
     }
 }
